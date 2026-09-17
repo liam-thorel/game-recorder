@@ -106,7 +106,7 @@ function parseTime(str) {
   return parts.reduce((acc, n) => acc * 60 + n, 0);
 }
 
-export async function renderPlayer(root, id) {
+export async function renderPlayer(root, id, { t: startAt = 0 } = {}) {
   let vod = await window.api.library.get(id);
   if (!vod) {
     root.append(h('div.page', h('div.empty', h('h2', 'VOD introuvable'), h('button.btn', { onclick: () => (location.hash = '#/library') }, 'Retour'))));
@@ -275,7 +275,7 @@ export async function renderPlayer(root, id) {
     h('div.spacer'),
     mixerEl,
     h('button.btn', { title: 'Ajouter un marqueur ici (M)', onclick: () => addMarker() }, icon('marker'), 'Marqueur'),
-    h('button.btn', { title: 'Créer un clip autour de ce moment (C)', onclick: () => openClip({ start: video.currentTime - 10, end: video.currentTime + 5, label: 'clip' }) }, icon('scissors'), 'Clip'),
+    h('button.btn', { title: 'Créer un clip autour de ce moment (C)', onclick: () => openClip({ start: video.currentTime - settings.clipPaddingBefore, end: video.currentTime + settings.clipPaddingAfter, label: 'clip' }) }, icon('scissors'), 'Clip'),
     h('button.btn.icon.ghost', { title: 'Plein écran (F)', onclick: () => toggleFullscreen() }, icon('fullscreen'))
   );
 
@@ -490,6 +490,23 @@ export async function renderPlayer(root, id) {
   }
 
   // ---------- Export de clip ----------
+  /** Boutons −5 / −1 / +1 / +5 s pour ajuster un champ de temps. */
+  function nudges(input, onChange) {
+    return h(
+      'div.nudge-group',
+      [-5, -1, 1, 5].map((d) =>
+        h('button.btn', {
+          onclick: () => {
+            const t = parseTime(input.value);
+            if (!Number.isFinite(t)) return;
+            input.value = fmtTime(Math.max(0, Math.min(dur(), t + d)));
+            onChange();
+          },
+        }, `${d > 0 ? '+' : '−'}${Math.abs(d)} s`)
+      )
+    );
+  }
+
   function openClip({ start, end, label }) {
     video.pause();
     start = Math.max(0, start);
@@ -537,9 +554,9 @@ export async function renderPlayer(root, id) {
       bar.style.width = '0%';
       const volumes = Object.fromEntries(TRACKS.map((t) => [t.key, mix[t.key].m ? 0 : mix[t.key].v]));
       try {
-        const file = await window.api.clips.export({ id: vod.id, start: a, end: b, volumes, label: nameIn.value });
+        const { name } = await window.api.clips.export({ id: vod.id, start: a, end: b, volumes, label: nameIn.value });
         close();
-        toast('Clip exporté', { label: 'Afficher', run: () => window.api.clips.reveal(file) });
+        toast('Clip exporté', { label: 'Voir le clip', run: () => (location.hash = `#/clips/${encodeURIComponent(name)}`) });
       } catch (e) {
         exportBtn.disabled = false;
         msg.textContent = `Échec : ${e.message}`;
@@ -553,6 +570,7 @@ export async function renderPlayer(root, id) {
         'div.modal',
         h('h2', 'Exporter un clip'),
         h('div.row', h('label', 'Début', startIn), h('label', 'Fin', endIn)),
+        h('div.row.nudges', nudges(startIn, updateRange), nudges(endIn, updateRange)),
         h('label', 'Nom', nameIn),
         msg,
         barWrap,
@@ -582,7 +600,11 @@ export async function renderPlayer(root, id) {
   };
   raf = requestAnimationFrame(frame);
   disposers.push(() => cancelAnimationFrame(raf));
-  video.addEventListener('loadedmetadata', paintMarkers);
+  video.addEventListener('loadedmetadata', () => {
+    paintMarkers();
+    // Ouverture depuis un clip : on se place au moment du clip.
+    if (startAt > 0) seek(startAt);
+  }, { once: true });
 
   // ---------- Raccourcis ----------
   const onKey = (e) => {
@@ -601,7 +623,7 @@ export async function renderPlayer(root, id) {
       p: () => jumpHighlight(-1),
       f: toggleFullscreen,
       m: addMarker,
-      c: () => openClip({ start: video.currentTime - 10, end: video.currentTime + 5, label: 'clip' }),
+      c: () => openClip({ start: video.currentTime - settings.clipPaddingBefore, end: video.currentTime + settings.clipPaddingAfter, label: 'clip' }),
       escape: () => document.fullscreenElement && document.exitFullscreen(),
     };
     if (map[k]) {

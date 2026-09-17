@@ -215,8 +215,22 @@ class Recorder extends EventEmitter {
     };
     this.emitStatus();
     try {
-      if (this.obsStarting) await this.obsStarting;
-      this.session.startedAtMs = await this.obs.startRecording(game);
+      // Garde-fou : quoi qu'il arrive côté OBS, on ne reste pas bloqué sur « Démarrage… ».
+      let timer;
+      const giveUp = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('OBS ne répond pas (délai dépassé)')), 90000);
+      });
+      try {
+        this.session.startedAtMs = await Promise.race([
+          (async () => {
+            if (this.obsStarting) await this.obsStarting;
+            return this.obs.startRecording(game);
+          })(),
+          giveUp,
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
     } catch (e) {
       this.session = null;
       this.state = 'idle';
@@ -286,7 +300,7 @@ class Recorder extends EventEmitter {
   /** Reprend les post-traitements en attente et les enregistrements interrompus (crash, extinction du PC). */
   recover() {
     if (!fs.existsSync(this.rawDir)) return;
-    for (const f of fs.readdirSync(this.rawDir).filter((f) => /^job-d+.json$/.test(f))) {
+    for (const f of fs.readdirSync(this.rawDir).filter((f) => /^job-\d+\.json$/.test(f))) {
       try {
         const job = JSON.parse(fs.readFileSync(path.join(this.rawDir, f), 'utf8'));
         if (fs.existsSync(job.rawPath)) this.enqueue(job, path.join(this.rawDir, f));
