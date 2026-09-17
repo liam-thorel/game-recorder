@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const META = 'meta.json';
-const RESERVED = new Set(['_raw', 'Clips']);
+const RESERVED = new Set(['_raw', '_logs', 'Clips']);
 
 class Library {
   constructor(getSettings, log = () => {}) {

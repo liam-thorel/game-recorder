@@ -171,9 +171,21 @@ export async function renderSettings(root) {
       ),
       h('div.set-row', { style: { paddingTop: 0, borderTop: 0 } }, keyResult),
       row('Région Valorant', 'Détectée automatiquement.', h('span.dim', s.valorantRegion ? s.valorantRegion.toUpperCase() : 'non détectée')),
-      row('Raccourci marqueur', 'Pendant la partie, marque un moment à revoir.', hotkey),
-      row('Marge avant un clip', 'Secondes ajoutées avant un highlight lors d\'un export.', ...number('clipPaddingBefore', { min: 0, max: 60, suffix: 's' })),
-      row('Marge après un clip', null, ...number('clipPaddingAfter', { min: 0, max: 60, suffix: 's' }))
+      row('Raccourci marqueur', 'Pendant la partie, marque un moment à revoir.', hotkey)
+    ),
+    h(
+      'section.set-section',
+      h('h2', 'Clips'),
+      row(
+        'Temps avant l\'action',
+        'Début du clip : combien de secondes avant le highlight (bouton ✂) ou avant le moment affiché (bouton « Clip » / touche C).',
+        ...number('clipPaddingBefore', { min: 0, max: 120, suffix: 's' })
+      ),
+      row(
+        'Temps après l\'action',
+        'Fin du clip : combien de secondes après la fin du highlight ou le moment affiché. Tu peux toujours ajuster avant d\'exporter.',
+        ...number('clipPaddingAfter', { min: 0, max: 120, suffix: 's' })
+      )
     ),
     h(
       'section.set-section',

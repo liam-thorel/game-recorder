@@ -18,13 +18,12 @@ const DEFAULTS = {
   encoder: 'obs_nvenc_h264_tex',
   // OBS
   obsInstallDir: 'C:\\Program Files\\obs-studio',
-  obsPort: 4466,
   obsPassword: '',
   // Highlights
   henrikApiKey: '',
   valorantRegion: '', // auto-détecté si vide
-  clipPaddingBefore: 6,
-  clipPaddingAfter: 3,
+  clipPaddingBefore: 10,
+  clipPaddingAfter: 5,
   // Divers
   markerHotkey: 'F9',
   notifications: true,
@@ -44,6 +43,12 @@ function load() {
     data = JSON.parse(fs.readFileSync(file(), 'utf8'));
   } catch {}
   cache = { ...DEFAULTS, ...data };
+  // Anciennes marges par défaut (6 s / 3 s) jugées trop courtes : on passe aux nouvelles si l'utilisateur ne les a pas changées.
+  if (data.clipPaddingBefore === 6 && data.clipPaddingAfter === 3) {
+    cache.clipPaddingBefore = DEFAULTS.clipPaddingBefore;
+    cache.clipPaddingAfter = DEFAULTS.clipPaddingAfter;
+    save();
+  }
   if (!cache.obsPassword) {
     cache.obsPassword = crypto.randomBytes(16).toString('hex');
     save();

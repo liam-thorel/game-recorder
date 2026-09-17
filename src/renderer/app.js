@@ -1,14 +1,16 @@
 import { renderLibrary } from './views/library.js';
 import { renderPlayer } from './views/player.js';
 import { renderSettings } from './views/settings.js';
+import { renderClips } from './views/clips.js';
 import { GAME, fmtTime } from './util.js';
 
 const view = document.getElementById('view');
 let cleanup = null;
 
 function parseRoute() {
-  const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
-  return { name: name || 'library', arg: arg ? decodeURIComponent(arg) : null };
+  const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
+  const [name, arg] = path.split('/');
+  return { name: name || 'library', arg: arg ? decodeURIComponent(arg) : null, params: new URLSearchParams(query) };
 }
 
 export function navigate(hash) {
@@ -26,7 +28,8 @@ async function render() {
   });
   view.replaceChildren();
   view.scrollTop = 0;
-  if (route.name === 'vod' && route.arg) cleanup = await renderPlayer(view, route.arg);
+  if (route.name === 'vod' && route.arg) cleanup = await renderPlayer(view, route.arg, { t: Number(route.params.get('t')) || 0 });
+  else if (route.name === 'clips') cleanup = await renderClips(view, route.arg);
   else if (route.name === 'settings') cleanup = await renderSettings(view);
   else cleanup = await renderLibrary(view);
 }
@@ -36,7 +39,6 @@ window.addEventListener('hashchange', render);
 document.querySelectorAll('.rail-btn[data-route]').forEach((b) =>
   b.addEventListener('click', () => navigate(`#/${b.dataset.route}`))
 );
-document.querySelector('[data-action="clips"]').addEventListener('click', () => window.api.clips.openFolder());
 
 // ---------- Barre de statut ----------
 const bar = document.getElementById('statusbar');

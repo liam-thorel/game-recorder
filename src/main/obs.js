@@ -2,6 +2,7 @@
 // Les binaires ne sont pas copiés : on crée des jonctions vers l'install d'OBS.
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const { spawn, execFileSync } = require('child_process');
 const { EventEmitter } = require('events');
 const { default: OBSWebSocket } = require('obs-websocket-js');
@@ -27,6 +28,19 @@ const DISCORD_WINDOW = 'Discord:Chrome_WidgetWin_1:Discord.exe';
 const PRIORITY_EXE = 2;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Port TCP libre sur la boucle locale. */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
 
 function ini(sections) {
   return (
@@ -211,7 +225,7 @@ class ObsController extends EventEmitter {
           first_load: false,
           server_enabled: true,
           server_password: s.obsPassword,
-          server_port: s.obsPort,
+          server_port: this.port,
         },
         null,
         2
@@ -227,7 +241,19 @@ class ObsController extends EventEmitter {
     if (this.connected) return;
     if (!this.isRunning()) {
       // Une instance d'une session précédente peut encore tourner : on tente d'abord de s'y connecter.
-      if (!(await this.tryConnect())) {
+      let reused = false;
+      if (this.findRunningPid()) {
+        this.port = this.readConfiguredPort();
+        reused = await this.tryConnect();
+        if (!reused) {
+          this.log('Instance OBS orpheline injoignable : arrêt forcé');
+          await this.killRunning();
+        }
+      }
+      if (!reused) {
+        // Port choisi à chaque lancement : un port fixe peut être pris par un autre logiciel
+        // (le client Riot choisit son port local au hasard).
+        this.port = await freePort();
         this.prepare();
         this.log('Lancement d\'OBS');
         this.proc = spawn(
@@ -252,7 +278,8 @@ class ObsController extends EventEmitter {
         });
       }
     }
-    for (let i = 0; i < 60 && !this.connected; i++) {
+    const deadline = Date.now() + 45000;
+    while (!this.connected && Date.now() < deadline) {
       if (await this.tryConnect()) break;
       await sleep(500);
     }
@@ -272,15 +299,47 @@ class ObsController extends EventEmitter {
 
   async tryConnect() {
     if (this.connected) return true;
+    if (!this.port) return false;
     const s = this.getSettings();
+    let timer;
     try {
-      await this.ws.connect(`ws://127.0.0.1:${s.obsPort}`, s.obsPassword, { rpcVersion: 1 });
+      // Sans délai, une connexion vers un serveur qui n'est pas OBS peut rester en attente indéfiniment.
+      await Promise.race([
+        this.ws.connect(`ws://127.0.0.1:${this.port}`, s.obsPassword, { rpcVersion: 1 }),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('timeout')), 4000);
+        }),
+      ]);
       this.connected = true;
-      this.log('Connecté à OBS');
+      this.log(`Connecté à OBS (port ${this.port})`);
       return true;
     } catch {
+      await this.ws.disconnect().catch(() => {});
       return false;
+    } finally {
+      clearTimeout(timer);
     }
+  }
+
+  readConfiguredPort() {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(path.join(this.configDir, 'plugin_config', 'obs-websocket', 'config.json'), 'utf8'));
+      return cfg.server_port || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async killRunning() {
+    const exe = this.exePath.replace(/'/g, "''");
+    try {
+      execFileSync(
+        'powershell.exe',
+        ['-NoProfile', '-Command', `Get-Process obs64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${exe}' } | Stop-Process -Force`],
+        { windowsHide: true, stdio: 'ignore' }
+      );
+    } catch {}
+    for (let i = 0; i < 20 && this.findRunningPid(); i++) await sleep(250);
   }
 
   async call(req, data) {

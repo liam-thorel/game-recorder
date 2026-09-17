@@ -10,10 +10,20 @@ function safeName(s) {
   const name = String(s || 'clip')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
-    .replace(/[^\w-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+    .replace(/[<>:"/\\|?*\x00-\x1f·]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
     .slice(0, 60);
   return name || 'clip';
+}
+
+/** Nom de fichier lisible pour le partage : "R4 Clutch 1v2 - Sova Haven 16-09". */
+function clipFileBase(meta, label) {
+  const s = meta.stats || {};
+  const d = new Date(meta.startedAt || Date.now());
+  const date = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const who = [s.champion || s.agent, s.map].filter(Boolean).join(' ');
+  return safeName(`${label || 'Clip'} - ${who ? `${who} ` : ''}${date}`);
 }
 
 /**
@@ -30,9 +40,9 @@ function safeName(s) {
 async function exportClip({ meta, videoPath, start, end, volumes, label, outDir, onProgress }) {
   const duration = Math.max(0.5, end - start);
   fs.mkdirSync(outDir, { recursive: true });
-  const base = `${meta.id}_${safeName(label)}_${Math.round(start)}s`;
+  const base = clipFileBase(meta, label);
   let out = path.join(outDir, `${base}.mp4`);
-  for (let i = 2; fs.existsSync(out); i++) out = path.join(outDir, `${base}_${i}.mp4`);
+  for (let i = 2; fs.existsSync(out); i++) out = path.join(outDir, `${base} (${i}).mp4`);
 
   const hasTracks = Object.keys(meta.files?.tracks || {}).length > 0;
   const active = hasTracks ? Object.entries(TRACK_INDEX).filter(([k]) => (volumes?.[k] ?? 1) > 0) : [];

@@ -1369,3 +1369,237 @@ table.board .pname {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* ---------- Clips ---------- */
+.clips-page .page-head .dim {
+  font-size: 13px;
+}
+.clip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+.clip-grid > .empty {
+  grid-column: 1 / -1;
+}
+.clip-card .thumb .preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  pointer-events: none;
+}
+.clip-card .play-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.clip-card .play-hint svg {
+  width: 44px;
+  height: 44px;
+  padding: 12px 10px 12px 14px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.clip-card:hover .play-hint {
+  opacity: 1;
+}
+.clip-card:hover .thumb:has(.preview) .play-hint {
+  opacity: 0;
+}
+.clip-card .thumb .br {
+  z-index: 2;
+}
+.clip-card .thumb .tl {
+  z-index: 2;
+}
+.card-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 3;
+}
+.card:hover .card-actions {
+  opacity: 1;
+}
+.card-actions button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+.card-actions button:hover {
+  background: var(--imp1);
+}
+.card-actions button.danger:hover {
+  background: var(--loss);
+}
+.card-actions svg {
+  width: 16px;
+  height: 16px;
+}
+.clip-card .card-meta span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-card .card-meta .time {
+  flex: none;
+}
+.clip-card .check {
+  z-index: 3;
+}
+
+.btn.danger:hover:not(:disabled) {
+  color: var(--loss);
+  border-color: var(--loss);
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #06070a;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  animation: fade-in 0.15s ease-out;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.viewer-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  min-width: 0;
+}
+.viewer-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  min-width: 0;
+}
+.viewer-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.viewer-title .rename {
+  opacity: 0.6;
+}
+.viewer-title:hover .rename {
+  opacity: 1;
+}
+.viewer-title .title-input {
+  width: min(520px, 60vw);
+  font-size: 16px;
+  height: 36px;
+}
+.viewer-stage {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 64px;
+  align-items: center;
+  min-height: 0;
+  padding: 0 8px;
+}
+.viewer-video {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+.viewer-video video {
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  border-radius: var(--radius);
+  outline: none;
+}
+.viewer-nav {
+  justify-self: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--panel);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+}
+.viewer-nav:hover:not(:disabled) {
+  background: var(--panel-2);
+}
+.viewer-nav:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.viewer-nav svg {
+  width: 20px;
+  height: 20px;
+}
+.viewer-bottom {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 14px 20px 18px;
+}
+.viewer-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.viewer-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.drag-handle {
+  cursor: grab;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.modal .row.nudges {
+  margin-top: -4px;
+}
+.nudge-group {
+  display: flex;
+  gap: 4px;
+}
+.nudge-group .btn {
+  flex: 1;
+  height: 26px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}

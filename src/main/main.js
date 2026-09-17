@@ -17,7 +17,9 @@ const settings = require('./settings');
 const { ObsController } = require('./obs');
 const { Library } = require('./library');
 const { Recorder } = require('./recorder');
+const { execFile } = require('child_process');
 const { exportClip } = require('./clips');
+const { ClipLibrary } = require('./clipLibrary');
 const { serveFile } = require('./media');
 const henrik = require('./highlights/henrik');
 const riotClient = require('./games/riotClient');
@@ -40,11 +42,21 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 // ---------- Logs ----------
-const logFile = path.join(app.getPath('userData'), 'app.log');
+// Journal rangé avec les VODs : facile à retrouver et à envoyer en cas de souci.
+function logPath() {
+  try {
+    const dir = path.join(settings.get().recordingsDir, '_logs');
+    fs.mkdirSync(dir, { recursive: true });
+    return path.join(dir, 'app.log');
+  } catch {
+    return path.join(app.getPath('userData'), 'app.log');
+  }
+}
 let lastLogError = null;
 process.stdout.on?.('error', () => {});
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
+  const logFile = logPath();
   try {
     if (fs.existsSync(logFile) && fs.statSync(logFile).size > 5 * 1024 * 1024) fs.renameSync(logFile, logFile + '.old');
     fs.appendFileSync(logFile, line);
@@ -66,6 +78,7 @@ const obs = new ObsController({
   log,
 });
 const library = new Library(settings.get, log);
+const clips = new ClipLibrary(settings.get, library, log);
 const recorder = new Recorder({ obs, library, getSettings: settings.get, updateSettings: settings.update, log });
 
 let win = null;
@@ -243,18 +256,53 @@ function setupIpc() {
       outDir,
       onProgress: (ratio) => send('clip:progress', { id, ratio }),
     });
-    return file;
+    const name = await clips.register(file, { vod: meta, start, end, label });
+    return { file, name };
   });
   ipcMain.handle('clip:reveal', (_e, file) => shell.showItemInFolder(file));
   ipcMain.handle('clips:openFolder', () => {
-    const dir = path.join(settings.get().recordingsDir, 'Clips');
-    fs.mkdirSync(dir, { recursive: true });
-    return shell.openPath(dir);
+    fs.mkdirSync(clips.dir, { recursive: true });
+    return shell.openPath(clips.dir);
+  });
+  ipcMain.handle('clips:list', () => clips.list());
+  ipcMain.handle('clips:revealByName', (_e, name) => shell.showItemInFolder(clips.resolve(name)));
+  ipcMain.handle('clips:rename', (_e, name, title) => clips.rename(name, title));
+  ipcMain.handle('clips:confirmDelete', async (_e, names) => {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Supprimer', 'Annuler'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Supprimer',
+      message: names.length > 1 ? `Supprimer ces ${names.length} clips ?` : 'Supprimer ce clip ?',
+      detail: 'Le fichier sera effacé du disque.',
+    });
+    return response === 0;
+  });
+  ipcMain.handle('clips:delete', (_e, names) => clips.delete(names));
+  // Copie le fichier (pas un lien) : Ctrl+V dans Discord ou l'explorateur l'envoie directement.
+  ipcMain.handle('clips:copy', (_e, name) => {
+    const file = clips.resolve(name).replace(/'/g, "''");
+    return new Promise((resolve) => {
+      execFile('powershell.exe', ['-NoProfile', '-Command', `Set-Clipboard -LiteralPath '${file}'`], { windowsHide: true }, (err) =>
+        resolve(!err)
+      );
+    });
+  });
+  ipcMain.on('clips:startDrag', (e, name) => {
+    try {
+      const file = clips.resolve(name);
+      let dragIcon = nativeImage.createFromPath(clips.thumbPath(name));
+      dragIcon = dragIcon.isEmpty() ? icon('icon.png').resize({ width: 64 }) : dragIcon.resize({ width: 160 });
+      e.sender.startDrag({ file, icon: dragIcon });
+    } catch (err) {
+      log(`Glisser le clip : ${err.message}`);
+    }
   });
 
   ipcMain.handle('settings:get', () => {
     const { obsPassword, ...rest } = settings.get();
-    return { ...rest, isPackaged: app.isPackaged, logFile };
+    return { ...rest, isPackaged: app.isPackaged, logFile: logPath() };
   });
   ipcMain.handle('settings:update', (_e, patch) => {
     delete patch.obsPassword;
@@ -264,6 +312,7 @@ function setupIpc() {
     );
     const s = settings.update(patch);
     if ('openAtLogin' in patch) applyLoginItem();
+    if ('recordingsDir' in patch) clips.watch();
     if ('micDevice' in patch && obs.connected) {
       obs.call('SetInputSettings', { inputName: 'Mic', inputSettings: { device_id: s.micDevice }, overlay: true }).catch(() => {});
     }
@@ -304,7 +353,7 @@ function setupIpc() {
   ipcMain.handle('app:openExternal', (_e, url) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
   });
-  ipcMain.handle('app:openLog', () => shell.openPath(logFile));
+  ipcMain.handle('app:openLog', () => shell.openPath(logPath()));
 
   ipcMain.handle('status:get', () => recorder.status());
 }
@@ -320,6 +369,14 @@ app.whenReady().then(() => {
       const p = path.resolve(RENDERER_DIR, ...parts);
       if (!p.startsWith(RENDERER_DIR)) return new Response('Forbidden', { status: 403 });
       return serveFile(p, request);
+    }
+    if (url.host === 'clip' && (parts.length === 1 || (parts.length === 2 && parts[0] === '.meta'))) {
+      try {
+        const file = parts.length === 1 ? clips.resolve(parts[0]) : path.join(clips.metaDir, path.basename(parts[1]));
+        return serveFile(file, request);
+      } catch {
+        return new Response('Not found', { status: 404 });
+      }
     }
     if (url.host === 'vod' && parts.length === 2) {
       try {
@@ -343,6 +400,8 @@ app.whenReady().then(() => {
     send('status', st);
   });
   recorder.on('library-changed', () => send('library:changed'));
+  clips.on('changed', () => send('clips:changed'));
+  clips.watch();
   recorder.on('recording-started', ({ game }) => {
     registerMarkerHotkey(true);
     notify('Enregistrement démarré', `${GAME_LABEL[game]} — ${settings.get().markerHotkey} pour marquer un moment`);
