@@ -47,6 +47,7 @@ const ICONS = {
   marker: '<path d="M6 3v18M6 4h11l-2 4 2 4H6"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.5 9.5l5 2.5-5 2.5z" fill="currentColor" stroke="none"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
   chevron: '<path d="M9 18l6-6-6-6"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',

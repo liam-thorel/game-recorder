@@ -1603,3 +1603,32 @@ table.board .pname {
   font-size: 12px;
   color: var(--text-2);
 }
+
+/* ---------- YouTube ---------- */
+.card-actions button.yt:hover {
+  background: #ff0033;
+}
+.card-actions button.yt.on {
+  color: #ff5a6e;
+}
+.btn.yt-btn:hover {
+  border-color: #ff0033;
+  color: #ff5a6e;
+}
+.btn.yt-on {
+  color: #ff5a6e;
+}
+.upload-bar {
+  flex: 1 1 160px;
+  height: 6px;
+  min-width: 120px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.upload-bar > div {
+  height: 100%;
+  width: 0;
+  background: #ff0033;
+  transition: width 0.2s;
+}

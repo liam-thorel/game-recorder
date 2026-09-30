@@ -24,6 +24,11 @@ const DEFAULTS = {
   valorantRegion: '', // auto-détecté si vide
   clipPaddingBefore: 10,
   clipPaddingAfter: 5,
+  // YouTube (identifiants OAuth du projet Google Cloud de l'utilisateur)
+  youtubeClientId: '',
+  youtubeClientSecret: '',
+  youtubeRefreshToken: '',
+  youtubePrivacy: 'unlisted',
   // Divers
   markerHotkey: 'F9',
   notifications: true,

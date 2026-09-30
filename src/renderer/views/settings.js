@@ -117,6 +117,69 @@ export async function renderSettings(root) {
   }, 'Enregistrer et tester');
   const link = (label, url) => h('a', { onclick: () => window.api.app.openExternal(url) }, label);
 
+  // ---------- YouTube ----------
+  function youtubeSection() {
+    const section = h('section.set-section');
+    const idIn = h('input.input', { value: '', placeholder: '…apps.googleusercontent.com', spellcheck: false });
+    const secretIn = h('input.input', { type: 'password', value: '', placeholder: 'Code secret du client', spellcheck: false });
+    const stateEl = h('div.result');
+
+    const paint = (st) => {
+      idIn.value = st.clientId || '';
+      if (st.youtubeHasSecret || st.configured) secretIn.placeholder = '•••••••• (enregistré)';
+      const connectBtn = h('button.btn', {
+        disabled: !st.configured,
+        onclick: async () => {
+          connectBtn.disabled = true;
+          connectBtn.textContent = 'Fenêtre Google ouverte…';
+          const r = await window.api.youtube.connect();
+          if (!r.ok) {
+            stateEl.textContent = r.message;
+            stateEl.className = 'result bad';
+            paint(await window.api.youtube.status());
+            return;
+          }
+          stateEl.textContent = 'Compte connecté';
+          stateEl.className = 'result ok';
+          paint(r.status);
+        },
+      }, st.connected ? 'Reconnecter' : 'Connecter mon compte');
+
+      section.replaceChildren(
+        h('h2', 'YouTube'),
+        h('div.set-row', h('div', h('div.lbl', st.connected ? 'Compte connecté' : 'Compte non connecté'),
+          h('div.help',
+            'Envoi d\'un clip en un clic (bouton YouTube ou touche Y dans la galerie). Il faut un identifiant Google gratuit : ',
+            link('console Google Cloud', 'https://console.cloud.google.com/apis/credentials'),
+            ' → activer « YouTube Data API v3 », puis créer un ID client OAuth de type « Application de bureau ». Tant que ce projet n\'est pas audité par YouTube, les vidéos envoyées peuvent arriver en privé.'
+          )),
+          h('div.ctl', connectBtn, st.connected ? h('button.btn.danger', { onclick: async () => paint(await window.api.youtube.disconnect()) }, 'Déconnecter') : null)
+        ),
+        h('div.set-row', h('div', h('div.lbl', 'ID client'), h('div.help', 'Depuis ton identifiant OAuth Google.')), h('div.ctl', idIn)),
+        h('div.set-row', h('div', h('div.lbl', 'Code secret du client'), h('div.help', 'Stocké en clair dans les réglages de l\'appli, sur ce PC.')),
+          h('div.ctl', secretIn, h('button.btn', {
+            onclick: async () => {
+              const next = await window.api.youtube.saveCredentials({ clientId: idIn.value, clientSecret: secretIn.value || undefined });
+              secretIn.value = '';
+              stateEl.textContent = next.configured ? 'Identifiants enregistrés' : 'ID client ou code secret manquant';
+              stateEl.className = `result ${next.configured ? 'ok' : 'bad'}`;
+              paint(next);
+            },
+          }, 'Enregistrer'))),
+        h('div.set-row', { style: { paddingTop: 0, borderTop: 0 } }, stateEl),
+        row('Confidentialité', 'Visibilité des vidéos envoyées.', h(
+          'select.input',
+          { onchange: (e) => save({ youtubePrivacy: e.target.value }) },
+          [['unlisted', 'Non répertorié (lien)'], ['private', 'Privé'], ['public', 'Public']].map(([v, l]) =>
+            h('option', { value: v, selected: (s.youtubePrivacy || 'unlisted') === v }, l)
+          )
+        ))
+      );
+    };
+    window.api.youtube.status().then((st) => paint({ ...st, youtubeHasSecret: s.youtubeHasSecret }));
+    return section;
+  }
+
   page.append(
     h('div.page-head', h('h1', 'Réglages')),
     h(
@@ -187,6 +250,7 @@ export async function renderSettings(root) {
         ...number('clipPaddingAfter', { min: 0, max: 120, suffix: 's' })
       )
     ),
+    youtubeSection(),
     h(
       'section.set-section',
       h('h2', 'Général'),
