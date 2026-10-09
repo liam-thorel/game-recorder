@@ -1,7 +1,7 @@
 {
   "name": "game-recorder",
   "productName": "Game Recorder",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "Enregistre automatiquement les parties de LoL et Valorant avec pistes audio séparées et highlights",
   "main": "src/main/main.js",
   "scripts": {

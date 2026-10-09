@@ -1,4 +1,4 @@
-import { h, icon, fmtTime, fmtBytes, GAME, RESULT, toast } from '../util.js';
+import { h, fill, icon, fmtTime, fmtBytes, GAME, RESULT, toast } from '../util.js';
 
 const state = { q: '', game: 'all', sort: 'recent' };
 
@@ -21,6 +21,7 @@ export async function renderClips(root, openName) {
   let selecting = false;
   const selected = new Set();
   let viewer = null;
+  const uploading = new Set();
 
   const grid = h('div.clip-grid');
   const countEl = h('span.dim.tnum');
@@ -97,6 +98,35 @@ export async function renderClips(root, openName) {
   async function copy(c) {
     const ok = await window.api.clips.copy(c.name);
     toast(ok ? 'Clip copié : colle-le dans Discord avec Ctrl+V' : 'Copie impossible');
+  }
+
+  async function upload(c, onProgress) {
+    const st = await window.api.youtube.status();
+    if (!st.configured || !st.connected) {
+      toast(st.configured ? 'Connecte ton compte YouTube dans les réglages' : 'Configure YouTube dans les réglages', {
+        label: 'Réglages',
+        run: () => (location.hash = '#/settings'),
+      });
+      return null;
+    }
+    if (uploading.has(c.name)) return null;
+    uploading.add(c.name);
+    const off = window.api.clips.onUploadProgress((p) => p.name === c.name && onProgress && onProgress(p.ratio));
+    toast(`Envoi de « ${c.title} » sur YouTube…`);
+    const res = await window.api.clips.upload(c.name);
+    off();
+    uploading.delete(c.name);
+    if (!res.ok) {
+      toast(`Envoi impossible : ${res.message}`);
+      return null;
+    }
+    toast(
+      res.privacy === 'private' ? "Envoyé, mais YouTube l'a mis en privé" : 'Clip en ligne, lien copié',
+      { label: 'Ouvrir', run: () => window.api.app.openExternal(res.url) }
+    );
+    navigator.clipboard?.writeText(res.url).catch(() => {});
+    await load();
+    return res;
   }
 
   async function remove(names) {
@@ -199,6 +229,9 @@ export async function renderClips(root, openName) {
         : h(
             'div.card-actions',
             h('button', { title: 'Copier (pour coller dans Discord)', onclick: (e) => (e.stopPropagation(), copy(c)) }, icon('copy')),
+            c.youtube
+              ? h('button.yt.on', { title: 'Ouvrir sur YouTube', onclick: (e) => (e.stopPropagation(), window.api.app.openExternal(c.youtube.url)) }, icon('youtube'))
+              : h('button.yt', { title: 'Envoyer sur YouTube', onclick: (e) => (e.stopPropagation(), upload(c)) }, icon('youtube')),
             h('button.danger', { title: 'Supprimer', onclick: (e) => (e.stopPropagation(), remove([c.name])) }, icon('trash'))
           ),
       h(
@@ -247,6 +280,8 @@ export async function renderClips(root, openName) {
     const infoEl = h('div.viewer-info');
     const actionsEl = h('div.viewer-actions');
     const counter = h('span.dim.tnum');
+    const uploadFill = h('div');
+    const uploadBar = h('div.upload-bar', { hidden: true }, uploadFill);
     const prevBtn = h('button.viewer-nav.prev', { title: 'Précédent (←)', onclick: () => go(-1) }, icon('back'));
     const nextBtn = h('button.viewer-nav.next', { title: 'Suivant (→)', onclick: () => go(1) }, icon('chevron'));
 
@@ -261,7 +296,7 @@ export async function renderClips(root, openName) {
         h('button.btn.icon.ghost', { title: 'Fermer (Échap)', onclick: () => close() }, icon('close'))
       ),
       h('div.viewer-stage', prevBtn, h('div.viewer-video', video), nextBtn),
-      h('div.viewer-bottom', infoEl, actionsEl)
+      h('div.viewer-bottom', infoEl, uploadBar, actionsEl)
     );
 
     function show() {
@@ -274,12 +309,14 @@ export async function renderClips(root, openName) {
       prevBtn.disabled = index === 0;
       nextBtn.disabled = index === list.length - 1;
 
-      titleEl.replaceChildren(
+      fill(
+        titleEl,
         h('span', { title: 'Renommer' }, c.title),
         h('button.btn.icon.ghost.rename', { title: 'Renommer', onclick: () => editTitle(c) }, icon('edit'))
       );
       const s = c.source || {};
-      infoEl.replaceChildren(
+      fill(
+        infoEl,
         c.game ? h(`span.game-badge.${c.game}`, GAME[c.game]?.short) : null,
         s.champion ? h('strong', s.champion) : null,
         s.map ? h('span', s.map) : null,
@@ -294,7 +331,11 @@ export async function renderClips(root, openName) {
           window.api.clips.startDrag(c.name);
         },
       }, icon('drag'), 'Glisser');
-      actionsEl.replaceChildren(
+      fill(
+        actionsEl,
+        c.youtube
+          ? h('button.btn.yt-on', { title: c.youtube.url, onclick: () => window.api.app.openExternal(c.youtube.url) }, icon('youtube'), 'Voir sur YouTube')
+          : h('button.btn.yt-btn', { title: 'Envoyer sur YouTube (Y)', onclick: () => uploadCurrent() }, icon('youtube'), 'YouTube'),
         h('button.btn.primary', { onclick: () => copy(c) }, icon('copy'), 'Copier'),
         drag,
         c.sourceExists
@@ -344,6 +385,19 @@ export async function renderClips(root, openName) {
       input.select();
     }
 
+    async function uploadCurrent() {
+      const c = list[index];
+      if (c.youtube) return window.api.app.openExternal(c.youtube.url);
+      uploadBar.hidden = false;
+      uploadFill.style.width = '0%';
+      const res = await upload(c, (ratio) => (uploadFill.style.width = `${Math.round(ratio * 100)}%`));
+      uploadBar.hidden = true;
+      if (res) {
+        Object.assign(c, { youtube: res });
+        show();
+      }
+    }
+
     function go(d) {
       const next = index + d;
       if (next < 0 || next >= list.length) return;
@@ -356,7 +410,10 @@ export async function renderClips(root, openName) {
       if (e.key === 'Escape') close();
       else if (e.key === 'ArrowLeft') (e.preventDefault(), go(-1));
       else if (e.key === 'ArrowRight') (e.preventDefault(), go(1));
-      else if (e.key === ' ') {
+      else if (e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        uploadCurrent();
+      } else if (e.key === ' ') {
         e.preventDefault();
         video.paused ? video.play() : video.pause();
       }

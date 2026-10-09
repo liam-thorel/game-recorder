@@ -20,6 +20,8 @@ const { Recorder } = require('./recorder');
 const { execFile } = require('child_process');
 const { exportClip } = require('./clips');
 const { ClipLibrary } = require('./clipLibrary');
+const { YouTube } = require('./youtube');
+const gameModes = require('./games/gameModes');
 const { serveFile } = require('./media');
 const henrik = require('./highlights/henrik');
 const riotClient = require('./games/riotClient');
@@ -79,6 +81,7 @@ const obs = new ObsController({
 });
 const library = new Library(settings.get, log);
 const clips = new ClipLibrary(settings.get, library, log);
+const youtube = new YouTube(settings.get, settings.update, log);
 const recorder = new Recorder({ obs, library, getSettings: settings.get, updateSettings: settings.update, log });
 
 let win = null;
@@ -184,6 +187,12 @@ function registerMarkerHotkey(enable) {
 }
 
 // ---------- IPC ----------
+/** Réglages sans les secrets (mot de passe OBS, identifiants Google). */
+function publicSettings() {
+  const { obsPassword, youtubeClientSecret, youtubeRefreshToken, ...rest } = settings.get();
+  return { ...rest, youtubeHasSecret: !!youtubeClientSecret };
+}
+
 function vodWithUrls(meta) {
   const base = `gr://vod/${meta.id}/`;
   return {
@@ -281,6 +290,50 @@ function setupIpc() {
   });
   ipcMain.handle('clips:delete', (_e, names) => clips.delete(names));
   // Copie le fichier (pas un lien) : Ctrl+V dans Discord ou l'explorateur l'envoie directement.
+  // ---------- YouTube ----------
+  ipcMain.handle('youtube:status', () => youtube.status());
+  ipcMain.handle('youtube:saveCredentials', (_e, { clientId, clientSecret }) => {
+    const patch = { youtubeClientId: String(clientId || '').trim() };
+    // Champ laissé vide = on garde le code secret déjà enregistré.
+    if (clientSecret) patch.youtubeClientSecret = String(clientSecret).trim();
+    settings.update(patch);
+    return youtube.status();
+  });
+  ipcMain.handle('youtube:connect', async () => {
+    try {
+      await youtube.connect((url) => shell.openExternal(url));
+      return { ok: true, status: youtube.status() };
+    } catch (e) {
+      log(`YouTube : ${e.message}`);
+      return { ok: false, message: e.message };
+    }
+  });
+  ipcMain.handle('youtube:disconnect', () => {
+    youtube.disconnect();
+    return youtube.status();
+  });
+  ipcMain.handle('youtube:upload', async (_e, name) => {
+    const meta = clips.readMeta(name) || {};
+    const s = meta.source || {};
+    const when = meta.createdAt ? new Date(meta.createdAt).toLocaleDateString('fr-FR') : '';
+    const game = GAME_LABEL[meta.game] || 'partie';
+    try {
+      const res = await youtube.upload({
+        file: clips.resolve(name),
+        title: meta.title || path.basename(name, '.mp4'),
+        description: [`${game}${s.champion ? ` — ${s.champion}` : ''}${s.map ? ` sur ${s.map}` : ''}`, when && `Partie du ${when}`].filter(Boolean).join('\n'),
+        tags: [game, s.champion, s.map].filter(Boolean),
+        privacy: settings.get().youtubePrivacy || 'unlisted',
+        onProgress: (ratio) => send('youtube:progress', { name, ratio }),
+      });
+      clips.setYoutube(name, { ...res, uploadedAt: new Date().toISOString() });
+      return { ok: true, ...res };
+    } catch (e) {
+      log(`Envoi YouTube (${name}) : ${e.message}`);
+      return { ok: false, message: e.message };
+    }
+  });
+
   ipcMain.handle('clips:copy', (_e, name) => {
     const file = clips.resolve(name).replace(/'/g, "''");
     return new Promise((resolve) => {
@@ -300,12 +353,12 @@ function setupIpc() {
     }
   });
 
+  ipcMain.handle('settings:gameModes', () => ({ lol: gameModes.LOL_MODES, valorant: gameModes.VALORANT_MODES }));
   ipcMain.handle('settings:get', () => {
-    const { obsPassword, ...rest } = settings.get();
-    return { ...rest, isPackaged: app.isPackaged, logFile: logPath() };
+    return { ...publicSettings(), isPackaged: app.isPackaged, logFile: logPath() };
   });
   ipcMain.handle('settings:update', (_e, patch) => {
-    delete patch.obsPassword;
+    for (const k of ['obsPassword', 'youtubeClientSecret', 'youtubeRefreshToken']) delete patch[k];
     const before = { ...settings.get() };
     const needsObsRestart = ['recordingsDir', 'width', 'height', 'fps', 'bitrateKbps', 'encoder', 'obsInstallDir'].some(
       (k) => k in patch && patch[k] !== before[k]
@@ -318,8 +371,7 @@ function setupIpc() {
     }
     if (needsObsRestart && obs.connected && recorder.state === 'idle') obs.shutdown();
     if ('markerHotkey' in patch && recorder.state === 'recording') registerMarkerHotkey(true);
-    const { obsPassword, ...rest } = s;
-    return rest;
+    return publicSettings();
   });
   ipcMain.handle('settings:pickDir', async () => {
     const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });

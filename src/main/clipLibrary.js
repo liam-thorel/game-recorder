@@ -194,6 +194,13 @@ class ClipLibrary extends EventEmitter {
     return name;
   }
 
+  /** Mémorise le lien YouTube d'un clip. */
+  setYoutube(name, youtube) {
+    const meta = this.readMeta(name) || {};
+    this.writeMeta(name, { ...meta, youtube });
+    this.emit('changed');
+  }
+
   rename(name, title) {
     const meta = this.readMeta(name) || {};
     const clean = String(title || '').trim().slice(0, 80);

@@ -1,4 +1,4 @@
-import { h, icon, fmtTime, fmtBytes, fmtClock, dayLabel, GAME, RESULT, vodTitle, vodSubtitle, kda, toast } from '../util.js';
+import { h, fill, icon, fmtTime, fmtBytes, fmtClock, dayLabel, GAME, RESULT, vodTitle, vodSubtitle, kda, toast } from '../util.js';
 
 // Filtres conservés entre deux visites de la page.
 const filters = { game: 'all', result: 'all', favorites: false, highlights: false, q: '' };
@@ -247,7 +247,8 @@ export async function renderLibrary(root) {
     const [list, usage] = await Promise.all([window.api.library.list(), window.api.library.usage()]);
     vods = list;
     const ratio = usage.maxBytes ? Math.min(1, usage.bytes / usage.maxBytes) : 0;
-    usageEl.replaceChildren(
+    fill(
+      usageEl,
       h('span.tnum', `${fmtBytes(usage.bytes)}${usage.maxBytes ? ` / ${fmtBytes(usage.maxBytes)}` : ''}`),
       usage.maxBytes ? h('div.usage-bar', h('div', { style: { width: `${ratio * 100}%` } })) : null
     );

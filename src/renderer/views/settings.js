@@ -15,6 +15,7 @@ const ENCODERS = [
 
 export async function renderSettings(root) {
   let s = await window.api.settings.get();
+  const modes = await window.api.settings.gameModes();
   const page = h('div.page.settings');
   root.append(page);
 
@@ -22,6 +23,31 @@ export async function renderSettings(root) {
     s = { ...s, ...(await window.api.settings.update(patch)) };
     toast(msg);
   };
+
+  /** Puces à cocher pour choisir les modes enregistrés d'un jeu. */
+  function modeChips(key, list) {
+    const wrap = h('div.mode-chips');
+    const current = () => (Array.isArray(s[key]) ? s[key] : list.map((m) => m.key));
+    const render = () => {
+      const on = current();
+      const all = on.length === list.length;
+      wrap.replaceChildren(
+        h(`button.chip${all ? '.on' : ''}`, {
+          onclick: () => save({ [key]: all ? [] : null }, all ? 'Aucun mode enregistré' : 'Tous les modes enregistrés').then(render),
+        }, 'Tous'),
+        ...list.map((m) =>
+          h(`button.chip${on.includes(m.key) ? '.on' : ''}`, {
+            onclick: () => {
+              const next = on.includes(m.key) ? on.filter((k) => k !== m.key) : [...on, m.key];
+              save({ [key]: next.length === list.length ? null : next }, 'Modes mis à jour').then(render);
+            },
+          }, m.label)
+        )
+      );
+    };
+    render();
+    return wrap;
+  }
 
   const row = (label, help, ...ctl) => h('div.set-row', h('div', h('div.lbl', label), help ? h('div.help', help) : null), h('div.ctl', ...ctl));
   const toggle = (key, opts = {}) =>
@@ -117,13 +143,78 @@ export async function renderSettings(root) {
   }, 'Enregistrer et tester');
   const link = (label, url) => h('a', { onclick: () => window.api.app.openExternal(url) }, label);
 
+  // ---------- YouTube ----------
+  function youtubeSection() {
+    const section = h('section.set-section');
+    const idIn = h('input.input', { value: '', placeholder: '…apps.googleusercontent.com', spellcheck: false });
+    const secretIn = h('input.input', { type: 'password', value: '', placeholder: 'Code secret du client', spellcheck: false });
+    const stateEl = h('div.result');
+
+    const paint = (st) => {
+      idIn.value = st.clientId || '';
+      if (st.youtubeHasSecret || st.configured) secretIn.placeholder = '•••••••• (enregistré)';
+      const connectBtn = h('button.btn', {
+        disabled: !st.configured,
+        onclick: async () => {
+          connectBtn.disabled = true;
+          connectBtn.textContent = 'Fenêtre Google ouverte…';
+          const r = await window.api.youtube.connect();
+          if (!r.ok) {
+            stateEl.textContent = r.message;
+            stateEl.className = 'result bad';
+            paint(await window.api.youtube.status());
+            return;
+          }
+          stateEl.textContent = 'Compte connecté';
+          stateEl.className = 'result ok';
+          paint(r.status);
+        },
+      }, st.connected ? 'Reconnecter' : 'Connecter mon compte');
+
+      section.replaceChildren(
+        h('h2', 'YouTube'),
+        h('div.set-row', h('div', h('div.lbl', st.connected ? 'Compte connecté' : 'Compte non connecté'),
+          h('div.help',
+            'Envoi d\'un clip en un clic (bouton YouTube ou touche Y dans la galerie). Il faut un identifiant Google gratuit : ',
+            link('console Google Cloud', 'https://console.cloud.google.com/apis/credentials'),
+            ' → activer « YouTube Data API v3 », puis créer un ID client OAuth de type « Application de bureau ». Tant que ce projet n\'est pas audité par YouTube, les vidéos envoyées peuvent arriver en privé.'
+          )),
+          h('div.ctl', connectBtn, st.connected ? h('button.btn.danger', { onclick: async () => paint(await window.api.youtube.disconnect()) }, 'Déconnecter') : null)
+        ),
+        h('div.set-row', h('div', h('div.lbl', 'ID client'), h('div.help', 'Depuis ton identifiant OAuth Google.')), h('div.ctl', idIn)),
+        h('div.set-row', h('div', h('div.lbl', 'Code secret du client'), h('div.help', 'Stocké en clair dans les réglages de l\'appli, sur ce PC.')),
+          h('div.ctl', secretIn, h('button.btn', {
+            onclick: async () => {
+              const next = await window.api.youtube.saveCredentials({ clientId: idIn.value, clientSecret: secretIn.value || undefined });
+              secretIn.value = '';
+              stateEl.textContent = next.configured ? 'Identifiants enregistrés' : 'ID client ou code secret manquant';
+              stateEl.className = `result ${next.configured ? 'ok' : 'bad'}`;
+              paint(next);
+            },
+          }, 'Enregistrer'))),
+        h('div.set-row', { style: { paddingTop: 0, borderTop: 0 } }, stateEl),
+        row('Confidentialité', 'Visibilité des vidéos envoyées.', h(
+          'select.input',
+          { onchange: (e) => save({ youtubePrivacy: e.target.value }) },
+          [['unlisted', 'Non répertorié (lien)'], ['private', 'Privé'], ['public', 'Public']].map(([v, l]) =>
+            h('option', { value: v, selected: (s.youtubePrivacy || 'unlisted') === v }, l)
+          )
+        ))
+      );
+    };
+    window.api.youtube.status().then((st) => paint({ ...st, youtubeHasSecret: s.youtubeHasSecret }));
+    return section;
+  }
+
   page.append(
     h('div.page-head', h('h1', 'Réglages')),
     h(
       'section.set-section',
       h('h2', 'Enregistrement'),
-      row('League of Legends', 'Enregistre automatiquement chaque partie.', toggle('recordLol')),
-      row('Valorant', 'Enregistre automatiquement chaque partie (hors Range).', toggle('recordValorant')),
+      row('League of Legends', 'Enregistre automatiquement les parties.', toggle('recordLol')),
+      h('div.set-row.modes-row', h('div', h('div.lbl', 'Modes LoL enregistrés'), h('div.help', "Le mode est lu dans le client au lancement de la partie. Client fermé, classée et normale ne sont pas distinguables : la partie est enregistrée si l'un des deux est coché.")), modeChips('lolModes', modes.lol)),
+      row('Valorant', 'Enregistre automatiquement les parties (hors Range).', toggle('recordValorant')),
+      h('div.set-row.modes-row', h('div', h('div.lbl', 'Modes Valorant enregistrés'), h('div.help', 'Lu dans la présence du client Riot au début de la partie.')), modeChips('valorantModes', modes.valorant)),
       row(
         'Dossier des VODs',
         null,
@@ -187,6 +278,7 @@ export async function renderSettings(root) {
         ...number('clipPaddingAfter', { min: 0, max: 120, suffix: 's' })
       )
     ),
+    youtubeSection(),
     h(
       'section.set-section',
       h('h2', 'Général'),

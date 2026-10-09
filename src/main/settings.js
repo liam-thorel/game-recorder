@@ -8,6 +8,9 @@ const DEFAULTS = {
   maxStorageGB: 500,
   recordLol: true,
   recordValorant: true,
+  // Modes enregistrés (null = tous). Voir games/gameModes.js
+  lolModes: null,
+  valorantModes: null,
   // Vidéo
   width: 1920,
   height: 1080,
@@ -24,6 +27,11 @@ const DEFAULTS = {
   valorantRegion: '', // auto-détecté si vide
   clipPaddingBefore: 10,
   clipPaddingAfter: 5,
+  // YouTube (identifiants OAuth du projet Google Cloud de l'utilisateur)
+  youtubeClientId: '',
+  youtubeClientSecret: '',
+  youtubeRefreshToken: '',
+  youtubePrivacy: 'unlisted',
   // Divers
   markerHotkey: 'F9',
   notifications: true,

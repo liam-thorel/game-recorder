@@ -5,6 +5,7 @@ const { EventEmitter } = require('events');
 const { listProcesses, EXE } = require('./games/processes');
 const lolClient = require('./games/lolClient');
 const riotClient = require('./games/riotClient');
+const gameModes = require('./games/gameModes');
 const { processRecording, fetchValorantHighlights } = require('./postprocess');
 
 const TICK_MS = 2000;
@@ -64,6 +65,7 @@ class Recorder extends EventEmitter {
       obsConnected: this.obs.connected,
       processing: this.queue.length + (this.processing ? 1 : 0),
       finalizing: !!this.finalizing,
+      skipped: this.skipGame ? this.skipLabel : null,
       lastError: this.lastError,
     };
   }
@@ -104,6 +106,7 @@ class Recorder extends EventEmitter {
     const lolRunning = s.recordLol && procs.has(EXE.lol);
     const valoRunning = s.recordValorant && procs.has(EXE.valorant);
     if (lolRunning || valoRunning) this.lastGameSeen = now;
+    else this.skipGame = null;
 
     // OBS est lancé dès que le jeu est ouvert, pour être prêt au début de la partie.
     if ((lolRunning || valoRunning) && !this.obs.connected && !this.obsStarting) {
@@ -123,12 +126,21 @@ class Recorder extends EventEmitter {
         const data = await lolClient.getAllGameData();
         // Après la fin de partie, le jeu reste ouvert quelques secondes et l'API répond encore : on ne relance pas.
         const ended = data?.events?.Events?.some((e) => e.EventName === 'GameEnd');
-        if (data && data.gameData && !ended) await this.begin('lol', { data });
+        if (data && data.gameData && !ended && !this.skipGame) {
+          const flow = await lolClient.getGameflow();
+          const mode = gameModes.lolMode({ queue: flow?.queue, isCustom: flow?.isCustom, gameMode: data.gameData.gameMode });
+          if (gameModes.isEnabled(mode, s.lolModes)) await this.begin('lol', { data, mode });
+          else this.skipMode('lol', mode);
+        }
       } else if (valoRunning) {
         const puuid = await this.riotPuuid();
         const presence = puuid && (await riotClient.getValorantPresence(puuid));
-        if (presence && presence.state === 'INGAME' && presence.provisioningFlow !== 'ShootingRange') {
-          await this.begin('valorant', { puuid, presence });
+        if (presence && presence.state === 'INGAME' && presence.provisioningFlow !== 'ShootingRange' && !this.skipGame) {
+          const mode = gameModes.valorantMode(presence);
+          if (gameModes.isEnabled(mode, s.valorantModes)) await this.begin('valorant', { puuid, presence, mode });
+          else this.skipMode('valorant', mode);
+        } else if (presence && presence.state !== 'INGAME') {
+          this.skipGame = null;
         }
       } else if (this.obs.connected && !this.processing && now - this.lastGameSeen > OBS_IDLE_SHUTDOWN_MS) {
         this.log('Plus de jeu ouvert : arrêt d\'OBS');
@@ -175,6 +187,15 @@ class Recorder extends EventEmitter {
     if (now - (session.persistedAt || 0) > 30000) this.persistSession();
   }
 
+  /** Mode non coché dans les réglages : on ignore cette partie jusqu'à sa fin. */
+  skipMode(game, mode) {
+    if (this.skipGame === game) return;
+    this.skipGame = game;
+    this.skipLabel = mode.label;
+    this.log(`Partie ignorée : mode « ${mode.label} » non coché dans les réglages`);
+    this.emitStatus();
+  }
+
   async riotPuuid() {
     const now = Date.now();
     if (!this.riot.puuid && now - this.riot.checkedAt > 10000) {
@@ -202,6 +223,7 @@ class Recorder extends EventEmitter {
     this.state = 'starting';
     this.session = {
       game,
+      mode: ctx.mode || null,
       startedAtMs: null,
       markers: [],
       lol: { events: [], offset: null },

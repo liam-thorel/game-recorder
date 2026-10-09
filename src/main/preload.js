@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('api', {
     delete: (names) => ipcRenderer.invoke('clips:delete', names),
     copy: (name) => ipcRenderer.invoke('clips:copy', name),
     startDrag: (name) => ipcRenderer.send('clips:startDrag', name),
+    upload: (name) => ipcRenderer.invoke('youtube:upload', name),
+    onUploadProgress: on('youtube:progress'),
     onChanged: on('clips:changed'),
   },
   settings: {
@@ -37,7 +39,14 @@ contextBridge.exposeInMainWorld('api', {
     update: (patch) => ipcRenderer.invoke('settings:update', patch),
     pickDir: () => ipcRenderer.invoke('settings:pickDir'),
     micDevices: () => ipcRenderer.invoke('settings:micDevices'),
+    gameModes: () => ipcRenderer.invoke('settings:gameModes'),
     testHenrik: (key) => ipcRenderer.invoke('settings:testHenrik', key),
+  },
+  youtube: {
+    status: () => ipcRenderer.invoke('youtube:status'),
+    saveCredentials: (creds) => ipcRenderer.invoke('youtube:saveCredentials', creds),
+    connect: () => ipcRenderer.invoke('youtube:connect'),
+    disconnect: () => ipcRenderer.invoke('youtube:disconnect'),
   },
   status: {
     get: () => ipcRenderer.invoke('status:get'),
