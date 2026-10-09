@@ -1,4 +1,4 @@
-import { h, icon, fmtTime, fmtBytes, GAME, RESULT, toast } from '../util.js';
+import { h, fill, icon, fmtTime, fmtBytes, GAME, RESULT, toast } from '../util.js';
 
 const state = { q: '', game: 'all', sort: 'recent' };
 
@@ -309,12 +309,14 @@ export async function renderClips(root, openName) {
       prevBtn.disabled = index === 0;
       nextBtn.disabled = index === list.length - 1;
 
-      titleEl.replaceChildren(
+      fill(
+        titleEl,
         h('span', { title: 'Renommer' }, c.title),
         h('button.btn.icon.ghost.rename', { title: 'Renommer', onclick: () => editTitle(c) }, icon('edit'))
       );
       const s = c.source || {};
-      infoEl.replaceChildren(
+      fill(
+        infoEl,
         c.game ? h(`span.game-badge.${c.game}`, GAME[c.game]?.short) : null,
         s.champion ? h('strong', s.champion) : null,
         s.map ? h('span', s.map) : null,
@@ -329,7 +331,8 @@ export async function renderClips(root, openName) {
           window.api.clips.startDrag(c.name);
         },
       }, icon('drag'), 'Glisser');
-      actionsEl.replaceChildren(
+      fill(
+        actionsEl,
         c.youtube
           ? h('button.btn.yt-on', { title: c.youtube.url, onclick: () => window.api.app.openExternal(c.youtube.url) }, icon('youtube'), 'Voir sur YouTube')
           : h('button.btn.yt-btn', { title: 'Envoyer sur YouTube (Y)', onclick: () => uploadCurrent() }, icon('youtube'), 'YouTube'),

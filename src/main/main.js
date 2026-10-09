@@ -21,6 +21,7 @@ const { execFile } = require('child_process');
 const { exportClip } = require('./clips');
 const { ClipLibrary } = require('./clipLibrary');
 const { YouTube } = require('./youtube');
+const gameModes = require('./games/gameModes');
 const { serveFile } = require('./media');
 const henrik = require('./highlights/henrik');
 const riotClient = require('./games/riotClient');
@@ -352,6 +353,7 @@ function setupIpc() {
     }
   });
 
+  ipcMain.handle('settings:gameModes', () => ({ lol: gameModes.LOL_MODES, valorant: gameModes.VALORANT_MODES }));
   ipcMain.handle('settings:get', () => {
     return { ...publicSettings(), isPackaged: app.isPackaged, logFile: logPath() };
   });

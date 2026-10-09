@@ -8,6 +8,9 @@ const DEFAULTS = {
   maxStorageGB: 500,
   recordLol: true,
   recordValorant: true,
+  // Modes enregistrés (null = tous). Voir games/gameModes.js
+  lolModes: null,
+  valorantModes: null,
   // Vidéo
   width: 1920,
   height: 1080,

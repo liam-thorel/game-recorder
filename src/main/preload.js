@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('api', {
     update: (patch) => ipcRenderer.invoke('settings:update', patch),
     pickDir: () => ipcRenderer.invoke('settings:pickDir'),
     micDevices: () => ipcRenderer.invoke('settings:micDevices'),
+    gameModes: () => ipcRenderer.invoke('settings:gameModes'),
     testHenrik: (key) => ipcRenderer.invoke('settings:testHenrik', key),
   },
   youtube: {

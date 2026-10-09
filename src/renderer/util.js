@@ -28,6 +28,12 @@ function append(el, children) {
   }
 }
 
+/** Remplace le contenu d'un élément en ignorant null/false (replaceChildren afficherait « null »). */
+export function fill(el, ...children) {
+  el.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
+  return el;
+}
+
 const ICONS = {
   play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/>',
   pause: '<path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z" fill="currentColor" stroke="none"/>',
@@ -146,7 +152,8 @@ export function kda(s) {
 let toastTimer;
 export function toast(message, action) {
   const el = document.getElementById('toast');
-  el.replaceChildren(h('span', message), action ? h('button.btn', { onclick: action.run }, action.label) : null);
+  // replaceChildren(null) afficherait le texte « null » : on ne passe que des nœuds réels.
+  el.replaceChildren(...[h('span', message), action && h('button.btn', { onclick: action.run }, action.label)].filter(Boolean));
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), action ? 8000 : 3500);

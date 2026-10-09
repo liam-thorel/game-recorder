@@ -63,7 +63,11 @@ function paintStatus() {
     bar.classList.add('processing');
     text.textContent = `Traitement de ${status.processing} partie${status.processing > 1 ? 's' : ''}…`;
   } else {
-    text.textContent = status.obsConnected ? 'Jeu détecté — prêt à enregistrer' : 'En attente d\'une partie de LoL ou Valorant';
+    text.textContent = status.skipped
+      ? `Partie ignorée : mode « ${status.skipped} » décoché dans les réglages`
+      : status.obsConnected
+        ? 'Jeu détecté — prêt à enregistrer'
+        : 'En attente d\'une partie de LoL ou Valorant';
   }
   const parts = [];
   if (status.state === 'recording' && status.markers) parts.push(`${status.markers} marqueur${status.markers > 1 ? 's' : ''}`);

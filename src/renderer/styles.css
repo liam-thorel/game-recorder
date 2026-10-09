@@ -1632,3 +1632,21 @@ table.board .pname {
   background: #ff0033;
   transition: width 0.2s;
 }
+
+.set-row.modes-row {
+  grid-template-columns: 1fr minmax(300px, 420px);
+}
+.mode-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.mode-chips .chip {
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.mode-chips .chip.on {
+  background: var(--panel-2);
+  color: var(--text);
+}

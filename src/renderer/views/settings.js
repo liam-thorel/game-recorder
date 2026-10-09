@@ -15,6 +15,7 @@ const ENCODERS = [
 
 export async function renderSettings(root) {
   let s = await window.api.settings.get();
+  const modes = await window.api.settings.gameModes();
   const page = h('div.page.settings');
   root.append(page);
 
@@ -22,6 +23,31 @@ export async function renderSettings(root) {
     s = { ...s, ...(await window.api.settings.update(patch)) };
     toast(msg);
   };
+
+  /** Puces à cocher pour choisir les modes enregistrés d'un jeu. */
+  function modeChips(key, list) {
+    const wrap = h('div.mode-chips');
+    const current = () => (Array.isArray(s[key]) ? s[key] : list.map((m) => m.key));
+    const render = () => {
+      const on = current();
+      const all = on.length === list.length;
+      wrap.replaceChildren(
+        h(`button.chip${all ? '.on' : ''}`, {
+          onclick: () => save({ [key]: all ? [] : null }, all ? 'Aucun mode enregistré' : 'Tous les modes enregistrés').then(render),
+        }, 'Tous'),
+        ...list.map((m) =>
+          h(`button.chip${on.includes(m.key) ? '.on' : ''}`, {
+            onclick: () => {
+              const next = on.includes(m.key) ? on.filter((k) => k !== m.key) : [...on, m.key];
+              save({ [key]: next.length === list.length ? null : next }, 'Modes mis à jour').then(render);
+            },
+          }, m.label)
+        )
+      );
+    };
+    render();
+    return wrap;
+  }
 
   const row = (label, help, ...ctl) => h('div.set-row', h('div', h('div.lbl', label), help ? h('div.help', help) : null), h('div.ctl', ...ctl));
   const toggle = (key, opts = {}) =>
@@ -185,8 +211,10 @@ export async function renderSettings(root) {
     h(
       'section.set-section',
       h('h2', 'Enregistrement'),
-      row('League of Legends', 'Enregistre automatiquement chaque partie.', toggle('recordLol')),
-      row('Valorant', 'Enregistre automatiquement chaque partie (hors Range).', toggle('recordValorant')),
+      row('League of Legends', 'Enregistre automatiquement les parties.', toggle('recordLol')),
+      h('div.set-row.modes-row', h('div', h('div.lbl', 'Modes LoL enregistrés'), h('div.help', "Le mode est lu dans le client au lancement de la partie. Client fermé, classée et normale ne sont pas distinguables : la partie est enregistrée si l'un des deux est coché.")), modeChips('lolModes', modes.lol)),
+      row('Valorant', 'Enregistre automatiquement les parties (hors Range).', toggle('recordValorant')),
+      h('div.set-row.modes-row', h('div', h('div.lbl', 'Modes Valorant enregistrés'), h('div.help', 'Lu dans la présence du client Riot au début de la partie.')), modeChips('valorantModes', modes.valorant)),
       row(
         'Dossier des VODs',
         null,

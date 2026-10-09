@@ -70,11 +70,11 @@ async function processRecording({ rawPath, session, library, log = () => {} }) {
   if (session.game === 'lol') {
     const { highlights, stats } = lolHighlights.analyze(session.lol || {});
     meta.highlights = highlights.filter((h) => h.t <= meta.duration + 5);
-    meta.stats = stats;
+    meta.stats = { ...stats, mode: session.mode?.label || stats.mode };
     meta.highlightsStatus = 'ready';
   } else if (session.game === 'valorant') {
     const v = session.valorant || {};
-    meta.stats = { map: prettyMap(v.map), mode: v.queue || null };
+    meta.stats = { map: prettyMap(v.map), mode: session.mode?.label || v.queue || null };
     meta.valorant = { puuid: v.puuid, scoreChanges: v.scoreChanges || [], recordingStartedAtMs: session.startedAtMs, attempts: 0 };
   }
 
